@@ -4,6 +4,7 @@ const {MongoClient, ObjectId} = require('mongodb')  // mongoDB 연결, objectID�
 const cors = require('cors')
 const MongoStore = require('connect-mongo')
 const nodemailer = require('nodemailer');
+const cookieparser = require('cookie-parser')
 
 
 
@@ -11,19 +12,25 @@ app.use(express.static(__dirname + '/public'))  // 퍼블릭 폴더 내부의 �
 //app.set('view engine', 'ejs')  // 우린 ejs를 view engine으로 쓴다
 app.use(express.json())
 app.use(express.urlencoded({extended:true})) // 이게 있어야 요청.body 사용 편해짐!
-app.use(cors());
+app.use(cors({
+  origin: '*', // 출처 허용 옵션
+  credential: 'true' // 사용자 인증이 필요한 리소스(쿠키 ..등) 접근
+}));
+
 
 
 const session = require('express-session')
 const passport = require('passport')
 const LocalStrategy = require('passport-local')
 app.use(passport.initialize())
+app.use(cookieparser());
+
 
 
 
 app.use(session({
   secret: '0920',
-  resave : false,
+  resave : true,
   saveUninitialized : false,
   cookie : {maxAge : 1000 * 60 * 3000},
   store: MongoStore.create({
@@ -32,7 +39,7 @@ app.use(session({
   })
 }))
 app.use(passport.session()) 
-
+app.use(passport.authenticate('session'))
 
 
 
@@ -50,15 +57,13 @@ passport.use(new LocalStrategy(async (입력한아이디, 입력한비번, cb) =
 
 passport.serializeUser((user, done) => {
   process.nextTick(() => {   // 특정 코드를 비동기적으로 처리해줌
-    done(null, { id: user._id, username: user.username })
+    done(null, {  id: user._id, username: user.username })
   })
 })
 
-passport.deserializeUser(async (user, done) => {
-  let result = await db.collection('user').findOne({_id : new ObjectId(user.id) })
-  delete result.password
+passport.deserializeUser((user, done) => {
   process.nextTick(() => {
-    return done(null, result)
+    return done(null, user)
   })
 })
 
@@ -86,12 +91,14 @@ app.listen(5173, () => {    //포트번호 5173
 })
 
 
+app.get('/lookSession', (req, res) => {
+  res.send({session : req.session})
+})
 
-
-app.post('/signin', (req, res, next) => {
+app.post('/signin', async (req, res, next) => {
   
 
-  passport.authenticate('local', (error, user, info) => {
+ await passport.authenticate('local', (error, user, info) => {
       if(error) return res.status(500).json(error)
       if(!user) return res.status(401).json(info.message)
       
@@ -102,6 +109,10 @@ app.post('/signin', (req, res, next) => {
 
       req.logIn(user, (err) => {
           if (err) return next(err);
+          
+          req.session.sessionID = req.user._id.toString();
+          console.log(req.session.sessionID);
+          res.json(req.user)
           res.status(200) // next 함수를 여기서 사용
           res.end()
 
@@ -112,6 +123,7 @@ app.post('/signin', (req, res, next) => {
 
 app.get('/signin', async(req, res) =>{
   res.status(200).end()
+
 }
 
 
@@ -179,8 +191,8 @@ app.get('/main', (req, res) => {
 
 
     UID : user._id,
-    username : user.username,
-    nickname : user.nickname
+    username : req.user.username,
+    nickname : req.user.nickname
 
 
 
@@ -188,9 +200,13 @@ app.get('/main', (req, res) => {
   })
   res.status(200)
   res.end();
-  ;})
+})
+  
 
+app.get('/giveme', (req, res) => {
 
+  console.log(req.session);
+  res.end()})
 
 ///////////////////////////////비밀번호 난수 생성 ///////////////////
 var variable = "0,1,2,3,4,5,6,7,8,9,a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z".split(",");
@@ -245,3 +261,5 @@ app.post('/new_password', async (req, res) =>{
     res.status(200).end()
   
   }})
+
+
