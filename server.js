@@ -6,6 +6,7 @@ const MongoStore = require('connect-mongo')
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken')
 const SECRET_KEY = 'Darak'
+const auth = require('./authMiddleware.js')
 
 
 app.use(express.static(__dirname + '/public'))  // 퍼블릭 폴더 내부의 파일을 사용할 수 있음!
@@ -130,8 +131,22 @@ app.post('/signup', async (req, res, next) => {
           expiresIn : '1d',
           issuer: 'codra'
         })
+
+
+        console.log(`회원가입 발생 : 
+        username : ${createdOne.username}
+        password : ${createdOne.password}`)
+
+        return res.status(200).json({
+          
+          code : 200,
+          message : "회원가입 완료! 환영해요!",
+          token : token
+
+        }).end()
         
-  
+
+
   
   
     
@@ -158,11 +173,6 @@ app.get('/main', (req, res) => {
   console.log(req.user._id)
 
   res.json({
-
-
-    UID : user._id,
-    username : req.user.username,
-    nickname : req.user.nickname
 
 
 
