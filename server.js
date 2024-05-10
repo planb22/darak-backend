@@ -6,9 +6,10 @@ const MongoStore = require('connect-mongo')
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken')
 const SECRET_KEY = 'Darak'
-const auth = require('./authMiddleware.js')
+const {auth} = require('./authMiddleware.js')
+const cookieParser = require('cookie-parser');
 
-
+app.use(cookieParser());
 app.use(express.static(__dirname + '/public'))  // 퍼블릭 폴더 내부의 파일을 사용할 수 있음!
 //app.set('view engine', 'ejs')  // 우린 ejs를 view engine으로 쓴다
 app.use(express.json())
@@ -61,12 +62,11 @@ if(result)
       issuer : 'codra',
     });
 
-
+    res.cookie('token', token);
 
     return res.status(200).json({
       code : 200,
       message : '로그인 성공! 토큰이 발급되었어요.',
-      token : token
     })
     res.end()
 
@@ -117,7 +117,8 @@ app.post('/signup', async (req, res, next) => {
         const result = { username : req.body.username,
           name : req.body.name,
           password : req.body.password,
-          nickname : req.body.nickname
+          nickname : req.body.nickname,
+          credit : 0
         }
         await db.collection('user').insertOne(result)
     
@@ -137,11 +138,12 @@ app.post('/signup', async (req, res, next) => {
         username : ${createdOne.username}
         password : ${createdOne.password}`)
 
+        res.cookie('token', token);
+
         return res.status(200).json({
           
           code : 200,
-          message : "회원가입 완료! 환영해요!",
-          token : token
+          message : "회원가입 완료! 환영해요!"
 
         }).end()
         
@@ -156,20 +158,10 @@ app.post('/signup', async (req, res, next) => {
 
 
 
-    function loggedin(req, res, next) {
-      if (req.user) {
-        console.log('not expired!')
-          next();
-      }
-      else{
-          res.status(500)
-          throw new Error('Session expired!')
-  
-      }
-    } 
 
 
-app.get('/main', (req, res) => {
+
+app.get('/main', auth, (req, res) => {
   console.log(req.user._id)
 
   res.json({
@@ -229,7 +221,7 @@ const emailOptions = { // 옵션값 설정
 
 
 
-app.post('/new_password', async (req, res) =>{
+app.post('/reset_password', async (req, res) =>{
 
   targetAccount = req.body.username
   targetPassword = createRandomPassword(variable, 8)
@@ -243,3 +235,22 @@ app.post('/new_password', async (req, res) =>{
   }})
 
 
+
+app.post('/new_password', auth, async(req, res) =>{
+  userToken= req.cookies.token
+  information = jwt.decode(token,'Darak')
+  console.log(information)
+  const info = await db.collection('user').findOne({nickname : information.nickname})
+  if (info.password == req.password)
+    {
+      res.status(400).json({code : 400, message : "이전 메시지와 동일해요."}).end()
+    }
+    else{
+      await db.collection('user').updateOne({nickname: information.nickname}, {$set : {password : req.body.password}})
+      res.status(200).json({
+        code : 200,
+        message : "비밀번호가 성공적으로 변경되었어요."
+    })
+    
+      
+    }})
