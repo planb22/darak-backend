@@ -4,8 +4,8 @@ const {MongoClient, ObjectId} = require('mongodb')  // mongoDB 연결, objectID�
 const cors = require('cors')
 const MongoStore = require('connect-mongo')
 const nodemailer = require('nodemailer');
-const cookieparser = require('cookie-parser')
-
+const jwt = require('jsonwebtoken')
+const SECRET_KEY = 'Darak'
 
 
 app.use(express.static(__dirname + '/public'))  // 퍼블릭 폴더 내부의 파일을 사용할 수 있음!
@@ -18,54 +18,6 @@ app.use(cors({
 }));
 
 
-
-const session = require('express-session')
-const passport = require('passport')
-const LocalStrategy = require('passport-local')
-app.use(passport.initialize())
-app.use(cookieparser());
-
-
-
-
-app.use(session({
-  secret: '0920',
-  resave : true,
-  saveUninitialized : false,
-  cookie : {maxAge : 1000 * 60 * 3000},
-  store: MongoStore.create({
-  mongoUrl : 'mongodb+srv://codra:qwer1234@codra.j81aade.mongodb.net/?retryWrites=true&w=majority&appName=Codra',
-  dbName: 'Darak',
-  })
-}))
-app.use(passport.session()) 
-app.use(passport.authenticate('session'))
-
-
-
-passport.use(new LocalStrategy(async (입력한아이디, 입력한비번, cb) => {
-  let result = await db.collection('user').findOne({ username : 입력한아이디})
-  if (!result) {
-    return cb(null, false, { message: '존재하지 않는 아이디입니다' })
-  }
-  if (result.password == 입력한비번) {
-    return cb(null, result)
-  } else {
-    return cb(null, false, { message: '비밀번호가 일치하지 않습니다' });
-  }
-}))
-
-passport.serializeUser((user, done) => {
-  process.nextTick(() => {   // 특정 코드를 비동기적으로 처리해줌
-    done(null, {  id: user._id, username: user.username })
-  })
-})
-
-passport.deserializeUser((user, done) => {
-  process.nextTick(() => {
-    return done(null, user)
-  })
-})
 
 
 
@@ -91,35 +43,47 @@ app.listen(5173, () => {    //포트번호 5173
 })
 
 
-app.get('/lookSession', (req, res) => {
-  res.send({session : req.session})
-})
 
-app.post('/signin', async (req, res, next) => {
+app.post('/signin', async (req, res) => {
   
+const userGivenUsername = req.body.username
+const userGivenPassword = req.body.password
 
- await passport.authenticate('local', (error, user, info) => {
-      if(error) return res.status(500).json(error)
-      if(!user) return res.status(401).json(info.message)
-      
-      // 요청 객체에 login 함수가 없는지 확인하여, next 함수 대신 에러를 처리합니다.
-      if (!req.logIn) {
-          return res.status(500).json({ message: '로그인 기능을 찾을 수 없습니다' });
-      }
+const result = await db.collection('user').findOne({username : userGivenUsername, password : userGivenPassword})
+if(result)
+  {
+    token = jwt.sign({
+      type : "JWT",
+      UID : result._id
+    }, SECRET_KEY, {
+      expiresIn : '60m',
+      issuer : 'codra',
+    });
 
-      req.logIn(user, (err) => {
-          if (err) return next(err);
-          
-          req.session.sessionID = req.user._id.toString();
-          console.log(req.session.sessionID);
-          res.json(req.user)
-          res.status(200) // next 함수를 여기서 사용
-          res.end()
 
-      });
-  })(req, res, next);
-});
 
+    return res.status(200).json({
+      code : 200,
+      message : '로그인 성공! 토큰이 발급되었어요.',
+      token : token
+    })
+    res.end()
+
+  }
+
+else{
+  return res.status(401).json({
+    code : 401,
+    message : '계정이 존재하지 않아요. 이메일과 비밀번호를 확인해주세요.'
+  })
+}
+
+
+
+
+
+
+})
 
 app.get('/signin', async(req, res) =>{
   res.status(200).end()
@@ -157,10 +121,16 @@ app.post('/signup', async (req, res, next) => {
         await db.collection('user').insertOne(result)
     
         const createdOne = await db.collection('user').findOne({username : req.body.username})
-        res.status(200)
-        console.log(req.body.username)
-        console.log(req.body.password)
-        res.end()
+
+        const token =jwt.sign({
+          type : 'JWT',
+          UID : createdOne._id,
+          nickname : createdOne.nickname,
+        }, SECRET_KEY, {
+          expiresIn : '1d',
+          issuer: 'codra'
+        })
+        
   
   
   
